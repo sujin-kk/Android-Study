@@ -285,7 +285,54 @@ public inline fun <R> runCatching(block: () -> R): Result<R> {
 }
 ```
 
-<img width="400" alt="Untitled 5" src="https://user-images.githubusercontent.com/85485290/185616630-ff8ba581-2c34-47fe-8980-eda4f230b25e.png"><img width="400" alt="Untitled 6" src="https://user-images.githubusercontent.com/85485290/185616641-651f7726-289c-42a3-bf8b-65cfd500f91f.png">
+ex) mapCatching / recoverChatching
+
+```kotlin
+    val k = null
+    runCatching {
+        k ?: throw NullPointException("k is null")
+    }.mapCatching {
+        // 성공 시 Mapping
+        "k is $k"
+    }.revoerCathcing { e -> 
+        // 실패 시 적용
+        when(e) {
+            is NullPointerException -> "still good"
+            else -> throw e
+        }
+    }.onSuccess { 
+        print(it)
+    }.onFailure { e ->
+        e.printStackTrace()
+    }
+    
+    // still good
+    // res1: kotlin.Result<kotlin.String> = still good
+```
+
+ex) getOrDefault
+
+```kotlin
+  val k = null
+  val mResult = runCatching {
+        k ?: throw NullPointException("k is null")
+  }.mapCatching {
+      // 성공 시 Mapping
+      "k is $k"
+  }.revoerCathcing { e -> 
+      // 실패 시 적용
+      when(e) {
+          is NullPointerException -> "still good"
+          else -> throw         }
+    }.onSuccess { 
+        print(it)
+    }.getOrDefault("default")
+    
+    print(mResult)
+    
+    // default
+```
+
 
 
 - 이 try-catch 구문을,,
@@ -395,7 +442,7 @@ But,,
 
 
 <aside>
-💡 **ViewModel에서는 LiveData를 사용**하고 **Repository와 Data Source 영역에서는 비동기적으로 Flow**를 사용한다면?
+💡 ViewModel에서는 LiveData를 사용하고 Repository와 Data Source 영역에서는 비동기적으로 Flow를 사용한다면?
 
 </aside>
 
