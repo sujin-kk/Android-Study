@@ -9,11 +9,9 @@
 
 - [데이터 스트림의 구성요소](#데이터-스트림의-구성요소)
 
-
 - [Flow의 예외처리](#flow의-예외처리)
 
 - [다른 Courtine Context](#다른-courtine-context)
-
 
 - [LiveData와 Flow의 차이](#livedata와-flow의-차이)
 
@@ -49,10 +47,12 @@
 
 ---
 
-#### 데이터 스트림의 구성요소
-    - `Producer` (생산자, 발행자)
-    - `Intermediary` (중간 연산자)
-    - `Consumer` (소비자)
+### 데이터 스트림의 구성요소
+`Producer` (생산자, 발행자)
+     
+`Intermediary` (중간 연산자)
+     
+`Consumer` (소비자)
 
 *→ flow의 세가지 핵심 구성요소*
 
