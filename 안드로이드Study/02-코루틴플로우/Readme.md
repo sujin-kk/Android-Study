@@ -2,6 +2,31 @@
 
 [flow-공식문서](https://developer.android.com/kotlin/flow?hl=ko)
 
+
+### 목차
+
+- [Coroutine의 Flow](#coroutine의-flow)
+
+- [데이터 스트림의 구성요소](#데이터-스트림의-구성요소)
+
+
+- [Flow의 예외처리](#flow의-예외처리)
+
+- [다른 Courtine Context](#다른-courtine-context)
+
+
+- [LiveData와 Flow의 차이](#livedata와-flow의-차이)
+
+- [Flow와 StateFlow 차이](#flow와-stateflow-차이)
+
+- [StateFlow와 SharedFlow 차이](#stateflow와-sharedflow-차이)
+
+- [collect와 colletLatest 차이](#collect와-colletlatest-차이)
+
+- [Hot Stream과 Cold Stream](#hot-stream과-cold-stream)
+
+---
+
 ### Coroutine의 Flow
 
 - 데이터 스트림 (Data Stream)
@@ -24,7 +49,7 @@
 
 ---
 
-- **데이터 스트림의 구성요소**
+#### 데이터 스트림의 구성요소
     - `Producer` (생산자, 발행자)
     - `Intermediary` (중간 연산자)
     - `Consumer` (소비자)
@@ -34,7 +59,7 @@
 <img width="734" alt="Untitled" src="https://user-images.githubusercontent.com/85485290/185615903-85aa1f83-7f5c-46c5-a371-b83a08774c95.png">
 
 
-### Producer
+#### Producer
 
 <img width="644" alt="Untitled 2" src="https://user-images.githubusercontent.com/85485290/185615834-7b5cb167-7210-4052-8bd6-96c510e7d56d.png">
 
@@ -80,7 +105,7 @@ interface NewsApi {
     - 이런 경우 [callbackFlow](https://kotlin.github.io/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/callback-flow.html) 같은 다른 흐름 빌더를 사용해야 함
    
 
-### Intermediary
+#### Intermediary
 
 <img width="636" alt="Untitled 3" src="https://user-images.githubusercontent.com/85485290/185616292-068d9abf-78d8-4696-a1e6-7f79fc8a63ec.png">
 
@@ -115,7 +140,7 @@ class NewsRepository(
 }
 ```
 
-### Consumer
+#### Consumer
 
 <img width="618" alt="Untitled 4" src="https://user-images.githubusercontent.com/85485290/185616352-e619a09b-2285-4d7d-bf71-821be660e611.png">
 
