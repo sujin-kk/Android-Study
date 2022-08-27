@@ -1,19 +1,37 @@
 # 03-Coroutine
 
+### 목차
+
++ [Coroutine](#coroutine)
+  - [Thread의 구조](#thread의-구조)
+  - [기존의 접근 방식과 한계점](#기존의-접근-방식과-한계점)
+  - [코루틴이 기존 한계점을 극복하는 방법](#코루틴이-기존-한계점을-극복하는-방법)
+  - [코루틴은 왜 스레드보다 가볍다고 할까?](#코루틴은-왜-스레드보다-가볍다고-할까?)
++ [Coroutine Context](#coroutine-context)
++ [Coroutine Scope](#coroutine-scope)
++ [Dispatcher](#dispatcher)
++ [supend fun](#supend-fun)
++ [withContext](#withcontext)
++ [안드로이드에서 코루틴 사용하기](#안드로이드에서-코루틴-사용하기)
++ [코루틴의 상태 관리](#코루틴의-상태-관리)
+  - [Job의 상태](#job의-상태)
+  - [Job의 상태 변수](#job의-상태-변수)
++ [코루틴 예외 다루기](#코루틴-예외-다루기)
++ [Supervisor Job 과 SupervisorScope](#supervisor-job-과-supervisorscope)
++ [Dispatchers.Main.Immediate](#dispatchersmainimmediate)
+
+---
+
 ### Coroutine
 
-<aside>
-💡 코루틴은 쓰레드 안에서 실행되는 **일시 중단 가능한 작업의 단위**이다. 하나의 쓰레드 안에 여러 코루틴이 존재할 수 있다.
-
-</aside>
+```
+💡 코루틴은 쓰레드 안에서 실행되는 일시 중단 가능한 작업의 단위이다. 하나의 쓰레드 안에 여러 코루틴이 존재할 수 있다.
+```
 
 - 스레드를 차단(block) 하지 않고, 실행을 중지(suspend) 할 수 있는 비동기 작업 실행 단위
 
-- 공식문서
 
-[](https://developer.android.com/kotlin/coroutines?hl=ko)
-
-- 참고 문서
+[공식문서](https://developer.android.com/kotlin/coroutines?hl=ko)
 
 [Reading Coroutine official guide thoroughly - Part 0](https://myungpyo.medium.com/reading-coroutine-official-guide-thoroughly-part-0-20176d431e9d)
 
@@ -34,12 +52,13 @@
         - RunOnUiThread
         - ~~AsyncTask~~
 
-### Thread의 구조
+#### Thread의 구조
 
 - 하나의 프로세스에는 여러 스레드가 있고, 각 스레드는 독립적으로 작업을 수행할 수 있음
 - ex) JVM 프로세스 상의 스레드 구성
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled.png)
+<img width="500" alt="Untitled" src="https://user-images.githubusercontent.com/85485290/187021434-efefb4e9-81e6-48df-846f-ed9ad7e42d5e.png">
+
 
 - JVM 프로세스는 Main Thread가 종료되면 강제로 종료되며, JVM 프로세스에 속한 Thread들도 함께 강제로 종료됨
 - 나머지 2개의 Thread에서는 Main Thread와 마찬가지로 작업을 수행할 수 있으며, 이 Thread들은 종료되더라도 다른 Thread에 영향을 미치지 않음
@@ -49,12 +68,11 @@
     - **다른 쓰레드를 생성**해 해당 쓰레드에서 높은 부하를 갖는 작업을 수행하도록 해야 함
     
 
-### 기존의 접근 방식과 한계점
+#### 기존의 접근 방식과 한계점
 
-<aside>
+```
 💡 그렇다면 기존에는 어떻게 높은 부하를 갖는 작업을 분산시켰을까?
-
-</aside>
+```
 
 1. Runnable 인터페이스를 구현하는 클래스를 만들고, 다음 Thread에 해당 클래스를 넣어 start 시키는 방식
 - ex) 전체 5개의 쓰레드 중 0번과 1번이 사용 됨
@@ -83,7 +101,7 @@ class ExampleRunnable: Runnable {
 }
 ```
 
-1. ExecuterService를 이용해 Thread Pool을 구성하여 작업을 던지는 방식
+2. ExecuterService를 이용해 Thread Pool을 구성하여 작업을 던지는 방식
 
 ```kotlin
 fun main() {
@@ -109,7 +127,7 @@ class ExampleRunnable: Runnable {
 }
 ```
 
-1. Rx 라이브러리를 이용
+3. Rx 라이브러리를 이용
 - Rx 라이브러리는 엄밀히 말하면 Reactive Programming을 돕기위한 것이지만, 데이터를 발행하는 Thread와 데이터를 구독하는 Thread를 손쉽게 제어할 수 있게 함으로써 쓰레드 작업을 쉽게할 수 있음
 
 ```kotlin
@@ -127,16 +145,18 @@ publisher.subscribeOn(Schedulers.io())
 
 → 작업 단위가 Thread 일 때 생기는 고질적인 문제들,,
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%201.png)
+<img width="600" alt="Untitled 1" src="https://user-images.githubusercontent.com/85485290/187021449-82b77b3b-2134-4b44-8dac-387fe4f8b1c9.png">
 
-### 코루틴이 기존 한계점을 극복하는 방법
+
+#### 코루틴이 기존 한계점을 극복하는 방법
 
 - 보통 메인 스레드에서 네트워크 요청을 보내면, 응답을 받을 때 까지 메인 스레드가 멈춤 → OS는 onDraw()를 호출할 수 없으므로 앱이 정지되어 버림
 - **코루틴은 메인 스레드에서 비동기 작업을 수행하면서도, 메인 스레드를 대기 시키지 않는다!**
 - 코루틴에서도 Thread라는 작업 단위를 사용하지만, **Thread 내부에서 작은 Thread 처럼 동작하는 코루틴이 존재**
 - Thread 하나를 일시중단 가능한 다중 경량 Thread 처럼 활용하는 것이 Coroutine!
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%202.png)
+<img width="260" alt="Untitled 2" src="https://user-images.githubusercontent.com/85485290/187021459-bf2c0e14-8160-442b-8f4e-696d3b8c4424.png">
+
 
 - 위에서 나온 Thread 문제 → 코루틴을 이용하여 쓰레드를 **Non Blocking** 하게 만들기!
 - Thread1 에서 코루틴 2개 생성
@@ -147,21 +167,23 @@ publisher.subscribeOn(Schedulers.io())
 - Blocking되는 상황이 줄어, Thread1이 **리소스를 최대한 활용**할 수 있음
 - Thread는 만드는 비용이 큰데, 코루틴은 쓰레드를 만드는 대신, **하나의 쓰레드 상에서 자신을 일시 중지할 수 있도록 하여, 쓰레드 생성 비용을 줄임**
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%203.png)
+<img width="600" alt="Untitled 3" src="https://user-images.githubusercontent.com/85485290/187021468-0c55377a-5b39-47ff-8b54-0ce21ab17794.png">
 
-### 코루틴은 왜 스레드 보다 가볍다고 할까?
+
+#### 코루틴은 왜 스레드보다 가볍다고 할까?
 
 > 코루틴 1개가 새로 생성되어 실행 ≠ 동시에 새로운 스레드 또한 생성?
 > 
 - 정확히 말하면 코루틴 생성 시 스케쥴러 생성에 따라 다르긴 함
 - 사실, 코루틴은 스케쥴링 가능한 코드 블록 or 이러한 코드 블록들의 집합 이라고 볼 수 있다는데,,
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%204.png)
+<img width="664" alt="Untitled 4" src="https://user-images.githubusercontent.com/85485290/187021473-004c81e5-ee45-4c18-b99e-769991b70258.png">
+
 
 1. 우리가 어떤 코루틴을 실행하기 위해서는 어떤 `CoroutineScope` 에 속해 있어야 함
     - 현재 코루틴 스코프가 갖는 `CoroutineContext`에서 Dispathcer는 `UI Dispatcher` 로 설정되어 있음 (= 현재 스코프에서 실행되는 중단 함수들은 **UI Thread** 에서 수행 됨을 의미)
 
-1. 이제 이 스코프 안에서 코루틴을 하나 만들었음
+2. 이제 이 스코프 안에서 코루틴을 하나 만들었음
     - 이 코루틴은 자신이 실행되는 스코프(부모)의 context를 그대로 상속하고, Dispatcher만 `ThreadPoolDispatcher`로 재정의 함 (재정의 하지 않으면, 기본적으로 부모 스코프로부터 모두 상속)
     - 이 코루틴에서 수행되는 함수는 ThreadPoolDispatcher를 이용하여 **워커(백그라운드) 스레드**에서 수행 됨
     - 이때, launch { } 와 같이 빌더를 실행했을 경우 마지막으로 넘긴 코드 블록 즉, 실제 수행하고자 하는 로직이 담긴 코드 블록은 Continuation 이라는 단위로 만들어짐.
@@ -169,7 +191,7 @@ publisher.subscribeOn(Schedulers.io())
 > *어떤 일을 수행하기 위한 일련의 함수들의 연결을 각 함수의 반환값을 이용하지 않고 Continuation 이라는 추가 파라미터(Callback)를 두어 연결하는 방식으로 Continuation 단위로 dispatcher 를 변경한다거나 실행을 유예한다거나 하는 플로우 컨트롤이 용이해지는 이점이 있음.*
 > 
 
-1. 이렇게 Continuation 으로 변경 된 코드 블럭은 최초에 `suspend` 상태로 생성 되었다가 `resume()` 요청으로 인해 resumed 상태로 전환되어 실행됨
+3. 이렇게 Continuation 으로 변경 된 코드 블럭은 최초에 `suspend` 상태로 생성 되었다가 `resume()` 요청으로 인해 resumed 상태로 전환되어 실행됨
     - Continuation의 재개(resume)가 요청될 때마다 현재 컨텍스트의 dispatcher 에게 dispatch(스레드 전환) 가 필요한지 `isDispatchNeeded()` 함수를 이용해 확인 한 후 dispatch가 필요하면 `dispatch()`함수를 호출하여 적합한 스레드로 전달하여 수행됨
 
 - 만약 코루틴 생성 시 Dispatcher를 재정의 하지 않고, UI Dispatcher를 그대로 상속 받아 사용했다면?
@@ -178,10 +200,9 @@ publisher.subscribeOn(Schedulers.io())
     
     **이것이 코루틴이 경량 스레드라고 불리는 이유**
     
-    <aside>
+    ```
     💡 코루틴은 Dispatcher에 의해 실행되는 환경(Thread)이 결정될 수는 있지만, 그 자체로는 환경을 새로 구성하거나 변경하진 않는다.
-    
-    </aside>
+    ```
     
 
 - 그래서 코루틴은 공식 가이드에 나와있는, 아래와 같은 코드가 **OOM(Out-Of-Memory)** 방식으로 동작할 수 있음
@@ -214,10 +235,9 @@ fun main(args: Array<String>) = runBlocking {
 
 [[Coroutine] 11. Coroutine CoroutineContext를 다루는 방법 : Coroutine Dispatcher과 ExceptionHandler을 CoroutineContext를 이용해 관리하기](https://kotlinworld.com/152?category=973476)
 
-<aside>
+```
 💡 CoroutineContext는 다양한 요소(Element)의 집합이다. 주요 요소는 **Job**과 **Dispatcher.**
-
-</aside>
+```
 
 - Coroutine Context는 코루틴이 실행되는 환경!
     - `Dispatcher`와 `CoroutineExceptionHandler` 또한 코루틴이 실행되는 환경의 일부 → 모두 CoroutineContext를 확장하는 인터페이스의 구현체
@@ -292,7 +312,8 @@ public interface Element : CoroutineContext {
 2. `CombinedContext`: 두개 이상의 컨텍스트가 명시되면 **컨텍스트 간 연결**을 위한 컨테이너역할을 하는 컨텍스트.
 3. `Element`: **컨텍트스의 각 요소**들도 CoroutineContext 를 구현.
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%205.png)
+<img width="600" alt="Untitled 5" src="https://user-images.githubusercontent.com/85485290/187021516-43f85355-b14e-463b-941d-269aeee03032.png">
+
 
 - ex) Global Scope.launch { } 를 수행 → launch 함수의 첫번째 파라미터인 CoroutineContext에 어떤 값을 넘기는 지에 따라 변화되는 코루틴 컨텍스트의 상태
 - 각각의 요소를 + 연산자를 이용해 연결(merge)
@@ -306,18 +327,15 @@ public interface Element : CoroutineContext {
 
 ### Coroutine Scope
 
-- 공식문서 - 수명 주기를 인식하며 코루틴 사용하기
-
-[](https://developer.android.com/topic/libraries/architecture/coroutines?hl=ko)
-
 - 참고 문서
+
+[공식문서 - 수명 주기를 인식하며 코루틴 사용하기](https://developer.android.com/topic/libraries/architecture/coroutines?hl=ko)
 
 [[Android CoroutineScope] 1. Activity, ViewModel에서 올바른 CoroutineScope 사용법 : lifecycleScope과 viewModelScope의 활용](https://kotlinworld.com/198?category=973478)
 
-<aside>
+```
 💡 CoroutineScope는 **Coroutine job이 실행되는 Scope** 이다.
-
-</aside>
+```
 
 - **코루틴의 실행 범위를 지정해줌**
     - `CoroutineScope(Dispathcers.Main).launch { }`
@@ -350,7 +368,8 @@ public interface CoroutineScope {
 - 아래 코드에서 앱을 실행 뒤, Activity에서 뒤로 가기를 누르면
 - → Activity가 onDestroy 되더라도 여전히 stringFlow에 대한 collect가 수행됨 (코루틴 잡이 캔슬되지 않고, 계속 새로운 잡 수행)
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%206.png)
+<img width="335" alt="Untitled 6" src="https://user-images.githubusercontent.com/85485290/187021549-18af8975-230f-4814-a75f-0a36a0019087.png">
+
 
 - **안드로이드를 위한 CoroutineScope**
     - `lifecycleScope`
@@ -359,12 +378,13 @@ public interface CoroutineScope {
 - **Activity에서 사용해야 하는 lifecycleScope**
 - Activity에서 뒤로가기를 누르면 OnDestroy가 호출되므로 lifecycleScope가 취소되어 stringFlow를 collect하는 Job 또한 중지된다!
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%207.png)
+<img width="327" alt="Untitled 7" src="https://user-images.githubusercontent.com/85485290/187021551-38295c4b-0d81-4fdd-be03-2208e7073486.png">
+
 
 - **ViewModel에서 사용해야 하는 viewModelScope**
 - ViewModel은 Fragment 혹은 Activity의 Lifecycle에 binding 되므로 viewModelScope는 binding된 lifecycle에 맞춰 viewModelScope 내의 Job에 대한 취소를 하도록 함
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%208.png)
+<img width="241" alt="Untitled 8" src="https://user-images.githubusercontent.com/85485290/187021554-a5a1acb3-5789-4cd1-b750-d8b27688408f.png">
 
 - lifecycleScope의 한계점
     - onDestory시에 collect가 중단됨
@@ -372,25 +392,27 @@ public interface CoroutineScope {
     - 위의 예시들에서 앱을 뒤로가기로 종료하지 않고, 홈버튼을 눌러 내린다면? → 계속해서 Job 실행, 유저가 UI 화면을 보지 않음에도 collect가 일어나는 문제,,
     
 
-<aside>
+```
 💡 **onStart**에서 Job을 생성 시작하고, **onStop**에서 Job을 cancel 하기
-
-</aside>
+```
 
 - Coroutine Job을 onStart에서 생성하고, onStop에서 cancel 하게 되면 ‘홈버튼'을 눌렀을 때도 flow에 관한 collect(데이터 수집)가 중지됨!
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%209.png)
+<img width="329" alt="Untitled 9" src="https://user-images.githubusercontent.com/85485290/187021561-8ad40da6-fb2b-4ea2-ba11-10f9288c958c.png">
+
 
 - 하지만 위와 같이 매번 Coroutine Job을 생성하고 해제해주는 일은 보일러 플레이트 코드를 생성시키는 것일뿐,,
 - 만약 하나라도 cancel 하는 것을 깜빡했을 땐? 백그라운드에서 작업이 계속 일어나 메모리 사용량이 높은 상태로 유지되어 시스템에 의해 App이 강제 종료될 수도 있음
 
-- 안드로이드에서는 **onStart**에서 Job을 생성 시작하고, **onStop**에서 Job을 cancel 하는 API 제공!
+- 안드로이드에서는 onStart에서 Job을 생성 시작하고, onStop에서 Job을 cancel 하는 API 제공!
 - → `repeatOnLifecycle` 함수
+- `flowOnLifecycle` 알아보기
 
 > 코루틴 컨텍스트와 코루틴 스코프는 ‘어디에 쓸지 의도된 목적’이 다르다!
 > 
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2010.png)
+<img width="382" alt="Untitled 10" src="https://user-images.githubusercontent.com/85485290/187021564-2a73e323-26dd-4986-968c-5c69603113f2.png">
+
 
 ---
 
@@ -399,22 +421,23 @@ public interface CoroutineScope {
 - 코루틴에서는 스레드 풀을 만들고 → 디스패처를 통해서 코루틴에 대한 task 배분
 - **스레드에 코루틴을 보낸다.**
 
-<aside>
+```
 💡 코루틴을 Dispatcher에 전송하면, Dispatcher는 자신이 관리하는 Thread Pool의 내부 상황에 맞춰 코루틴을 배분함.
-
-</aside>
+```
 
 1. 유저가 코루틴을 생성 후 디스패처에 전송
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2011.png)
+<img width="670" alt="Untitled 11" src="https://user-images.githubusercontent.com/85485290/187021574-3b316937-af9c-4691-90ce-efb27fa6fc10.png">
 
-1. 디스패처는 자신이 잡고 있는 Thread Pool에서 자원이 남는 스레드가 어떤 스레드인지 확인한 후, 해당 스레드에 코루틴을 전송
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2012.png)
+2. 디스패처는 자신이 잡고 있는 Thread Pool에서 자원이 남는 스레드가 어떤 스레드인지 확인한 후, 해당 스레드에 코루틴을 전송
 
-1. 분배 받은 스레드는 해당 코루틴을 수행
+<img width="663" alt="Untitled 12" src="https://user-images.githubusercontent.com/85485290/187021577-a69974e3-670d-44f2-b002-e1d09bf208ac.png">
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2013.png)
+3. 분배 받은 스레드는 해당 코루틴을 수행
+
+<img width="333" alt="Untitled 13" src="https://user-images.githubusercontent.com/85485290/187021587-8579cde9-9528-4e48-8803-278ff60c2db5.png">
+
 
 - 안드로이드의 Dispatcher (기본 3가지 정의)
     - `Dispatchers.Main` - 안드로이드 **메인 스레드**에서 코루틴을 실행하는 디스패처. **UI와 상호작용하는 작업**을 실행하기 위해서만 사용해야 함. 코루틴이 메인스레드에서 작동.
@@ -431,16 +454,15 @@ public interface CoroutineScope {
 
 [[Coroutine] 5. suspend fun의 이해](https://kotlinworld.tistory.com/144?category=973476)
 
-<aside>
+```
 💡 코루틴은 **일시중단** 가능하다.
-
-</aside>
+```
 
 - launch로 실행하든, async로 실행하든 내부에 해당 코루틴을 일시중단 해야하는 동작이 있으면 코루틴은 일시 중단됨.
 
 - ex) 일시 중단 가능한 코루틴
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2014.png)
+<img width="660" alt="Untitled 14" src="https://user-images.githubusercontent.com/85485290/187021602-c0192951-0cc0-4248-8263-ed1706f11768.png">
 
 - 위 그림을 코드로 표현
 
@@ -503,14 +525,14 @@ I/System.out: 10000 // Coroutine1 작업 재개
 - 비동기 작업에서는 **다른 작업의 결과를 기다려야 할 때, 즉 일시 중단이 필요한 경우가 많음** → 코루틴에서는 해당 코루틴 작업을 잠시 일시 중단 가능하게 함
 - **일시 중단 가능한 함수는 코루틴 내부에서 수행되어야 함**
 
-<aside>
-💡 코루틴 일시 중단은 **코루틴 블록 내부**에서 수행되어야 한다.
 
-</aside>
+```
+💡 코루틴 일시 중단은 **코루틴 블록 내부**에서 수행되어야 한다.
+```
 
 - 만약 일시 중단이 코루틴 블록(launch, async) 내부에서 수행되지 않는다면?
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2015.png)
+<img width="498" alt="Untitled 15" src="https://user-images.githubusercontent.com/85485290/187021608-2d429ee1-e87c-4724-9b4a-6c3d1c4b0319.png">
 
 - 바로 오류가 나는데, 이를 해결하는 방법은 **두가지!**
     1. 일시 중단 작업을 내부로 옮기기
@@ -532,7 +554,7 @@ fun exampleSuspend() {
 }
 ```
 
-1. 일시 중단 작업을 수행하는 fun을 suspend fun으로 만들기
+2. 일시 중단 작업을 수행하는 fun을 suspend fun으로 만들기
     - suspend fun은 일시 중단 가능한 함수를 지칭하는 것
     - 즉, **suspend fun은 무조건 코루틴 내부에서 수행되어야 함**
     - suspend fun은 suspend fun 내부에서 수행 될 수 있음!
@@ -564,10 +586,9 @@ suspend fun exampleSuspend() {
 
 ### withContext
 
-<aside>
+```
 💡 `withContext` 는 결과값 수신이 필요한 코드의 순차화를 가능하게 한다!
-
-</aside>
+```
 
 - 기존에 다른 코루틴에 보내진 작업의 결과를 수신하려면,,,
 - Deferred로 결과값을 감싸 받아, await 으로 수신될 때까지 기다려야 했음
@@ -780,12 +801,11 @@ CoroutineScope(Dispatchers.Default).launch {
 
 [[Coroutine] 8. Coroutine Job의 상태 변수 isActive, isCancelled, isCompleted 알아보기](https://kotlinworld.tistory.com/147?category=973476)
 
-- **Job의 상태**
+#### **Job의 상태**
 
-<aside>
+```
 💡 Job의 상태는 **생성 - 실행 중 - 실행 완료 - 취소 중 - 취소 완료** 총 5가지
-
-</aside>
+```
 
 - `생성(New)` : Job이 생성됨
 - `실행 중(Active)` : Job이 실행 중
@@ -886,12 +906,11 @@ suspend fun main() {
 }
 ```
 
-- Job의 상태 변수
+#### Job의 상태 변수
 
-<aside>
+```
 💡 Job의 3가지 상태 변수 : isActive - isCancelled - isCompleted
-
-</aside>
+```
 
 - isActive : Job이 실행중인지 여부 표시
 - isCancelled : Job이 cancel 요청 되었는지 여부 표시
@@ -901,23 +920,23 @@ suspend fun main() {
     - Job이 CoroutineStart.LAZY로 생성되면, Job은 **생성됨(New) 상태에 머뭄.** 이때는 세가지 상태변수 모두 **false**이다.
     - start() 혹은 join()을 통해 Job이 **실행 중 상태**로 바뀌면 **isActive가 true**가 된다.
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2016.png)
+<img width="539" alt="Untitled 16" src="https://user-images.githubusercontent.com/85485290/187021666-be18b373-c001-4cbd-bf30-ee30f9823b38.png">
 
 - Job의 `cancel`이 호출되었을 때 상태변수 확인해보기
     - Job은 취소 중 상태로 바뀜. `isCancelled는 true`로 바뀜 → 취소 중인 상태에서는 취소가 완료된 것은 아니므로 isCompleted는 false
     - 취소가 완료 되면 `isCompleted가 true`로 바뀜 → `invokeOnCompletion`은 isCompleted의 상태를 관찰하는 메소드로 **isCompleted가 false→ true로 바뀔 때 호출**됨 (그래서 앞에서 취소가 완료 되었을 때도 호출되었던 것, null 출력)
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2017.png)
+<img width="653" alt="Untitled 17" src="https://user-images.githubusercontent.com/85485290/187021668-014fe778-5a88-4a15-a710-7df475132522.png">
 
 - Job이 `완료`되었을 때 상태 변수 확인해보기
     - Job이 완료되면 **isActive가 false**로 바뀌며, **isCompleted가 true**로 바뀜
     - isCompleted가 false → true로 바뀌었으므로, cancel과 마찬가지로 invokeOnCompletion을 통해 설정 된 람다식 호출O
-
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2018.png)
+	
+<img width="640" alt="Untitled 18" src="https://user-images.githubusercontent.com/85485290/187021671-aae47ec1-024e-4d43-99cf-1bc0db643197.png">
 
 - 모두 정리하면 다음과 같음
 
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2019.png)
+<img width="590" alt="Untitled 19" src="https://user-images.githubusercontent.com/85485290/187021673-6b7e4d07-2b1e-4fe7-906e-f363e32ea543.png">
 
 ---
 
@@ -1062,10 +1081,9 @@ Process finished with exit code 0
 
 - `Dispatchers.Main.immediate`와 `Dispatchers.Main`는 서로 다르다
 
-<aside>
+```
 💡 Immediate는 **job들의 실행 순서를 보장해준다!**
-
-</aside>
+```
 
 - ex) `Dispatchers.Main`
 - 순서가 보장되지 않음
@@ -1121,95 +1139,3 @@ class BasicCoroutineFragment : Fragment(R.layout.fragment_coroutine_basic) {
 
 - `lifecycleScope`나 `viewModelScope`는 `Dispatchers.Main.Immediate`에 바인딩 되어 있어서 **순서가 보장이 됨**
 - Dispatchers.Main을 사용하면 순서가 보장되지 않아서, 코드 양이 길어지면 예외 상황이 발생할 수 있음 → 의도를 명확히 전달하려면 Immetdiate 사용!
-
----
-
-### 예상 면접 질문
-
-**Q. 코루틴이 무엇인지? 쓰레드와의 차이점?**
-
-코루틴을  쉽게 말해서 스레드 내부에서 실행되는 “스레드를 차단(block) 하지 않고, 실행을 중지(suspend) 할 수 있는 비동기 작업 실행 단위” 라고 합니다. 하나의 스레드안에는 여러개의 코루틴이 존재할 수 있습니다. UI를 그려주고 사용자와 직접 인터랙션하는 **메인 쓰레드에서 많은 부하를 받는 작업은 지양하기 위해 여러 스레드를 생성해서 부하분산을 하려고 했지만,, 쓰레드는 이 생성 및 작업 전환하는 비용이 비싸다는 문제,,**
-
-- “작업의 단위”가 다른것이 큰 차이점일 것 같다.
-- 스레드가 블로킹되는 큰 문제점을 해결하고, 여러개의 코루틴으로 블로킹 없이 스레드 작업을 이어갈 수 있습니다.
-- 코루틴이 경량 쓰레드라고 불리는 이유,,
-- **스레드 부하는 없으므로 필요한 메모리를 할당하지 못하는 OOM을 피할 수 있다**!!
-
-쓰레드는 작업1이 작업2의 결과가 필요할 때 쓰레드1이 블로킹 되고 작업2가 끝날때까지 하는일 없이 블록킹되어서 리소스 낭비가 심하다 (작업 단위 = 쓰레드 → 너무 큼)
-
-작업 단위를 코루틴으로 설정하게 되면, 쓰레드 자체를 중단시키는게 아니라 작업을 하고 있는 코루틴을 중단하고 그 쓰레드 내에서 다른 작업을 하고 있으라고 시키면 됩니다. 그리고 다시 작업을 재개하면 쓰레드의 블록킹없이 여러개의 코루틴으로 큰 작업들을 이어나갈 수있습니다.
-
-코루틴은 작업1이 작업2의 결과가 필요할 때 쓰레드1 내부의 작업1을 일시중단하고 작업3을 수행하도록 함. 작업2가 끝날때까지 작업3를 하면되고, 작업2가 끝나면 작업3를 끝내고 작업2의 결과를 받아서 작업1을 재개 → 쓰레드의 블로킹이 없음 (작업단위 = 코루틴)
-
-**Q. 코루틴 컨텍스트와 코루틴 스코프의 차이?**
-
-- 코루틴 컨텍스트 - 코루틴이 실행되는 환경들의 집합 (디스패처나 코루틴익셉션핸들러 들도 코루틴이 실행되는 환경의 일부) → 어떤 스레드에서 코루틴이 실행될지 지정해주는 등, 플러스 연산자로 환경들을 등록할 수 있음
-- 코루틴 스코프 - 코루틴의 잡이 실행되는 범위, 기본적으로 코루틴 컨텍스트 하나만 멤버 속성으로 가지고 있음. 코루틴 스코프는 하나 이상의 코루틴을 관리하고 모든 코루틴은 스코프 내에서 실행되어야 함.
-- 코루틴 빌더로 코루틴을 생성할 때는 소속된 CoroutineScope 에 정의된 **CoroutineContext를 기반**으로 필요한 코루틴들을 생성함
-- ex) 코루틴 빌더 - launch, async / 스코프 빌더- coroutineScope, withContext 등)은 CoroutineScope 의 확장 함수로 정의 됨
-
-**Q. CoroutineScope의 종류와, 각각 쓰이는 상황? → 코루틴 스코프를 정의할 수 있는 것들에 대해 설명**
-
-코루틴 스코프는 코루틴의 실행 범위를 지정해줌
-
-- CoroutineScope
-    - 지정된 코루틴 컨텍스트를 감싸는 코루틴 범위를 만들 수 있습니다. → 기본적으로 하위 코루틴이 실패하거나, 범위 자체를 취소하면 모든 스코프의 하위 코루틴이 취소됩니다. 부모를 캔슬하면 자식도 캔슬되는 것 입니다.
-- GlobalScope
-    - 코루틴 스코프의 한 종류
-    - 앱이 동작하는 동안 별도의 생명주기를 관리하지 않고 사용 가능함
-    - 안드로이드 앱이 처음 시작부터 종료할 때 까지 하나의 코루틴 컨텍스트 안에서 동작하도록 할 수 있음
-    - Job을 컨트롤 하기에 적합하진 않음,, 잘 사용X
-- lifecycleScope
-    - 지정한 라이프사이클(액티비티나 프래그먼트)와 연계되어, 라이프사이클이 destroyed되면 스코프도 취소됩니다.
-- viewModelScope
-    - ViewModel에 연결된 코루틴 스코프입니다. 뷰모델이 지워지면 (ViewModel.onCleared가 호출되면) 스코프도 취소됩니다.
-
-**Q. suspend fun 에 대한 설명?**
-
-- 코루틴을 설명할 때 “스레드를 차단(block) 하지 않고, 실행을 중지(suspend) 할 수 있는 작업 실행 단위” 라고 많이하는데, 여기서 코루틴을 실행 중지 할 수 있다는 것이 suspend fun의 특징을 말한 것입니다.
-- suspend fun은 일시 중단 가능한 함수로, 해당 함수 내에 일시 중단 가능한 작업이 있다는 것을 의미합니다.
-- 예를들어 → await 메소드로 작업의 결과를 반환받을 때 까지 작업을 일시 중단해야 할 때 코루틴 블록내에서 실행되거나, suspend fun 으로 만든 후 코루틴 블록 내부에서 실행해야 합니다.
-
-**Q. Dispatcher에 대한 설명과 종류?**
-
-- 코루틴 컨텍스트의 일부
-- **코루틴을 디스패처에 전송하게 되면, 디스패처는 대상 스레드 풀의 내부 상황에 맞춰 코루틴을 배분합니다.** 예를 들어, 스레드 풀안에 스레드 1,2,3이 있는데 스레드2가 쉬고있는 상태면 여기에 코루틴을 집어 넣고, 수행되는 것입니다.
-
-![Untitled](03-Coroutine%20700ec47846c64b8a9e0ee2ffdd89dd2e/Untitled%2020.png)
-
-**Q. launch 와 async의 차이?**
-
-- 둘 다 새로운 코루틴을 실행 할 수 있는 코루틴빌더입니다. (코루틴 스코프의 확장함수)
-- launch는 결과를 반환하지 않는 단순 작업에 적합하고, 어싱크는 결과 값이 deferred 객체로 감싸서 반환됩니다.
-
-**Q. 코루틴으로 작업을 수행할 때, 메모리 누수 방지하는 방법?**
-
-- 코루틴은 액티비티/프래그먼트의 **생명주기에 따라서 onDestroy 시점에서 소멸될 때 관련 코루틴을 한번에 취소하여 메모리 누수를 방지**합니다. 하지만 만약 앱이 백그라운드로 내려간다면 잡을 계속 수행함
-- →  **onStart에서 잡을 생성 시작하고 onStop에서 Job을 캔슬** 시킴 → 매번 이런 코드를 생성하지 않도록 **repeatOnLifecycle** 함수 제공 → 포그라운드에서만 작업되어야 하는 코루틴 블록에 적합,, 백그라운드에선 쓰면 안됨 (onStart~onStop 이기 때문)
-
-**Q. 코루틴에서 예외 처리하는 방법?**
-
-- invokeOnCompletion을 이용해서 job이 완료되었을 때 호출되는 람다식에서 처리를 해줄 수 있는데, 이 방법은 에러가 발생해서 job이 완료가 되어도 → 잡이 모두 수행되기만 하면 호출되는 문제가 있습니다.
-- 그래서 CoroutineExceptionHandler 를 사용해서 Job 내부에서 오류가 발생했을 때 실행되는 람다식을 이용해 처리할 수 있습니다. 런치할 때 구현해 둔 코루틴익셉션핸들러를 넘기면 에러의 타입검사 등을 할수도 있어서 에러를 유형별로 처리할 수 있습니다.
-
-**Q. 코루틴에서 context switching이 필요할 때와 하는 방법?**
-
-- 기본적으로 코루틴 스코프 내에서 하위 코루틴이 실패하거나, 범위 자체를 취소하면 모든 스코프의 하위 코루틴이 취소됩니다. 부모를 캔슬하면 자식도 캔슬되는 것 입니다.
-- 이 때 하위 코루틴들에 디스패처를 설정을 다르게 해주는 것만으로도 부모와 다른 스레드로 전환이 가능합니다.
-- 또 withContext라는 스코프 빌더를 사용하여, 코루틴 실행 중간에 컨텍스트를 바꿀 수 있습니다. 보통 네트워크나 디비에서 데이터를 받아온 작업을 IO 스레드에서 하고나서 UI를 갱신하기 위해 Main 스레드로 전환할 때 자주 씁니다.
-
-**Q. supervisor job에 대해 설명 (vs 일반 job과 비교)**
-
-- 코루틴 내부에서 코루틴이 수행될 수 있는데, 보통 자식 코루틴에 에러가 생기면 부모 코루틴 까지 취소되어버립니다. 부모 코루틴이 취소되면 당연히 자식으로 있는 모든 코루틴이 취소됩니다.
-- 이런 문제 방지를 위해 에러 전파 방향을 부모에서 → 자식으로만 한정짓는게 suvisorjob 입니다. 수퍼바이저 잡은 코루틴 컨텍스트이고, +연산자로 다른 컨텍스트들과 혼합해서 쓸 수 있습니다.
-- 매번 코루틴 컨텍스트에 수퍼바이저잡을 설정할 필요 없이 특정 코루틴 블록 내부의 모든 코루틴에 수퍼바이저 잡을 설정할 때 쓰는 것이 Supervisor Scope입니다. 자식 코루틴에서 익셉션이 발생해도, 부모로부터 전파되지 않아, 부모 코루틴의 다른 자식 코루틴을 영향을 받지 않고 계속 잡을 수행할 수 있습니다.
-- **한 코루틴이 실패해도 다른 코루틴이 취소되지 않는다**는 차이점이 있다.
-
-**Q. Dispatchers.Main.Immetdiate 에 대해 설명**
-
-- Dispatchers.Main.immediate와 Dispatchers.Main는 서로 다릅니다
-- **바로 job들의 실행 순서를 보장해줍니다**, 위의 코드는 start → parent : ? → end 순서로 로그가 찍힙니다, 그리고 따로 디스패처를 설정해 주지 않았기 때문에 기본으로 Main.immediate에 바인딩 되어있는 상태입니다.
-
-**일반적인 Main은 순서를 보장해주지 않기 때문**에 위의 코드 로그를 확인해 보면 start -> end -> parent : ? 순서로 실행이 되는 걸 확인할 수 있습니다
-
-- lifecycleScope나 viewModelScope는 Dispatchers.Main.Immetdiate에 바인딩 되어 있어서 순서가 보장이 됨 → 메인을 사용하면 순서가 보장되지 않아서 코드 양이 길어지면 예외 상황이 발생할 수 있음 → 의도를 명확히 전달하려면 Immetdiate 사용!
