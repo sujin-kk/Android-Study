@@ -67,6 +67,9 @@ Process -> Thread(Stack (공유 x)) -> Heap(공유가능)
 
 <참조문서>
 https://tinyurl.com/2j3qx4qw
+
 https://tinyurl.com/2ncuxj7j
+
 https://tinyurl.com/2gx9wkv2
+
 https://tinyurl.com/2pv9e9pt (coroutine object )
