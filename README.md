@@ -1,2 +1,3 @@
-# Android-Interview-Study
-2022 Android Interview Study
+# Android-Lab
+
+Android에 대해 공부한 것을 정리하고 다룹니다.
